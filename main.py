@@ -32,7 +32,7 @@ def show_initial_buttons(chat_id):
     btn_edit_task = KeyboardButton('/Editar')
     btn_delete_task = KeyboardButton('/Eliminar')
     markup.add(btn_add_task, btn_list_tasks, btn_edit_task, btn_delete_task)
-    bot.send_message(chat_id,'____________________________________', reply_markup=markup)
+    bot.send_message(chat_id,'Selecciona una opción:', reply_markup=markup)
 
 
 #Creacion de comandos simples como `/start`
@@ -48,9 +48,8 @@ def send_welcome(message):
         cursor.close()
         conn.close()
 
-    # Crear los botones
-    show_initial_buttons(message.chat.id)
     bot.send_message(message.chat.id, f'Hola {user.first_name}! Soy tu agenda bot. ¿Qué te gustaría hacer?')
+    show_initial_buttons(message.chat.id)
 
 
 # Manejar la descripción de la tarea
@@ -192,7 +191,8 @@ def ask_edit_choice(message):
         btn_edit_description = KeyboardButton('Editar Descripción')
         btn_edit_status = KeyboardButton('Editar Estado')
         btn_edit_due_date = KeyboardButton('Editar Fecha de Entrega')
-        markup.add(btn_edit_description, btn_edit_status, btn_edit_due_date)
+        btn_cancel = KeyboardButton('Cancelar')
+        markup.add(btn_edit_description, btn_edit_status, btn_edit_due_date, btn_cancel)
         
         msg = bot.reply_to(message, "¿Qué deseas editar?", reply_markup=markup)
         bot.register_next_step_handler(msg, lambda msg: handle_edit_choice(msg, task_id))
@@ -223,8 +223,10 @@ def handle_edit_choice(message, task_id):
     elif choice == 'Editar Fecha de Entrega':
         msg = bot.reply_to(message, "Ingresa la nueva fecha de entrega (formato YYYY-MM-DD):")
         bot.register_next_step_handler(msg, lambda msg: update_task_due_date(msg, task_id))
+    elif choice == 'Cancelar':
+        show_initial_buttons(message.chat.id)
     else:
-        bot.reply_to(message, 'Opción inválida. Por favor, selecciona "Editar Descripción", "Editar Estado" o "Editar Fecha de Entrega".')
+        bot.reply_to(message, 'Opción inválida. Por favor, selecciona "Editar Descripción", "Editar Estado", "Editar Fecha de Entrega" o "Cancelar".')
 
 def update_task_description(message, task_id):
     new_description = message.text
@@ -339,6 +341,7 @@ def delete_task(message):
             bot.reply_to(message, 'Error al conectar a la base de datos.')
     except ValueError:
         bot.reply_to(message, 'Entrada inválida. Por favor, ingresa un número de tarea válido.')
+
 
 # Iniciar el bot
 if __name__ == "__main__":
