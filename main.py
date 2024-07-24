@@ -196,26 +196,47 @@ def select_task_to_edit(message):
                 response += f"{num_task_user}. {description} - {status_name}\n"
 
             msg = bot.reply_to(message, response)
-            bot.register_next_step_handler(msg, ask_edit_choice)
+            bot.register_next_step_handler(msg, lambda msg: ask_edit_choice(msg, user_id))
         else:
             bot.reply_to(message, 'No tienes tareas registradas.')
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
-def ask_edit_choice(message):
+def ask_edit_choice(message, user_id):
     try:
-        task_id = int(message.text)
-        markup = ReplyKeyboardMarkup(row_width=3, one_time_keyboard=True, resize_keyboard=True)
-        btn_edit_description = KeyboardButton('Editar Descripción')
-        btn_edit_status = KeyboardButton('Editar Estado')
-        btn_edit_due_date = KeyboardButton('Editar Fecha de Entrega')
-        btn_cancel = KeyboardButton('Cancelar')
-        markup.add(btn_edit_description, btn_edit_status, btn_edit_due_date, btn_cancel)
-        
-        msg = bot.reply_to(message, "¿Qué deseas editar?", reply_markup=markup)
-        bot.register_next_step_handler(msg, lambda msg: handle_edit_choice(msg, task_id))
+        num_task_user = int(message.text)
+
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+            query = """
+            SELECT id
+            FROM tasks
+            WHERE user_id = %s AND num_task_user = %s
+            """
+            cursor.execute(query, (user_id, num_task_user))
+            task = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if task:
+                task_id = task[0]
+                markup = ReplyKeyboardMarkup(row_width=3, one_time_keyboard=True, resize_keyboard=True)
+                btn_edit_description = KeyboardButton('Editar Descripción')
+                btn_edit_status = KeyboardButton('Editar Estado')
+                btn_edit_due_date = KeyboardButton('Editar Fecha de Entrega')
+                btn_cancel = KeyboardButton('Cancelar')
+                markup.add(btn_edit_description, btn_edit_status, btn_edit_due_date, btn_cancel)
+                
+                msg = bot.reply_to(message, "¿Qué deseas editar?", reply_markup=markup)
+                bot.register_next_step_handler(msg, lambda msg: handle_edit_choice(msg, task_id))
+            else:
+                bot.reply_to(message, "Tarea no encontrada.")
+        else:
+            bot.reply_to(message, 'Error al conectar a la base de datos.')
     except ValueError:
         bot.reply_to(message, 'Entrada inválida. Por favor, ingresa un número de tarea válido.')
+
 
 def handle_edit_choice(message, task_id):
     choice = message.text
