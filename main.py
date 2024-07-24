@@ -32,10 +32,9 @@ def show_initial_buttons(chat_id):
     btn_edit_task = KeyboardButton('/Editar')
     btn_delete_task = KeyboardButton('/Eliminar')
     markup.add(btn_add_task, btn_list_tasks, btn_edit_task, btn_delete_task)
-    bot.send_message(chat_id,'Selecciona una opción:', reply_markup=markup)
+    bot.send_message(chat_id, 'Selecciona una opción:', reply_markup=markup)
 
-
-#Creacion de comandos simples como `/start`
+# Creación de comandos simples como `/start`
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user = message.from_user
@@ -47,10 +46,8 @@ def send_welcome(message):
         conn.commit()
         cursor.close()
         conn.close()
-
     bot.send_message(message.chat.id, f'Hola {user.first_name}! Soy tu agenda bot. ¿Qué te gustaría hacer?')
     show_initial_buttons(message.chat.id)
-
 
 # Manejar la descripción de la tarea
 def handle_task_description(message):
@@ -58,7 +55,6 @@ def handle_task_description(message):
     task_description = message.text
     bot.send_message(message.chat.id, 'Por favor, proporciona una fecha de vencimiento para la tarea (formato: YYYY-MM-DD).')
     bot.register_next_step_handler(message, handle_task_due_date, task_description)
-         
 
 # Manejar la fecha de vencimiento de la tarea
 def handle_task_due_date(message, task_description):
@@ -79,28 +75,21 @@ def handle_task_due_date(message, task_description):
         bot.register_next_step_handler(message, handle_task_due_date, task_description)
         return
     
-    #Comparar que la fecha ingresada no sea mayor a 2090
+    # Comparar que la fecha ingresada no sea mayor a 2090
     if task_due_date.year > 2090:
         bot.send_message(message.chat.id, 'La fecha de vencimiento no puede ser mayor al año 2090. Por favor, proporciona una fecha válida.')
         bot.register_next_step_handler(message, handle_task_due_date, task_description)
         return
 
     conn = get_db_connection()
-
-
     if conn:
-        #Traer todos los task del usuario
+        # Traer todas las tareas del usuario
         cursor = conn.cursor()
-        query = """
-            SELECT t.descript, t.due_date, s.name
-            FROM tasks t
-            JOIN task_status s ON t.status_id = s.id
-            WHERE t.user_id = %s
-            """
-        cursor.execute(query, (user_id,))
-        tasks = cursor.fetchall()
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO tasks (user_id, descript, due_date, num_task_user) VALUES (%s, %s, %s, %s)', (user_id, task_description, task_due_date, tasks.__len__()+1))
+        cursor.execute("SELECT COUNT(*) FROM tasks WHERE user_id = %s", (user_id,))
+        num_tasks = cursor.fetchone()[0]
+        
+        cursor.execute('INSERT INTO tasks (user_id, descript, due_date, num_task_user) VALUES (%s, %s, %s, %s)', 
+                       (user_id, task_description, task_due_date, num_tasks + 1))
         conn.commit()
         cursor.close()
         conn.close()
@@ -192,10 +181,13 @@ def select_task_to_edit(message):
         if tasks:
             response = "Selecciona el número de la tarea que deseas editar:\n"
             for task in tasks:
-                task_id, num_task_user ,description, status_name = task
+                task_id, num_task_user, description, status_name = task
                 response += f"{num_task_user}. {description} - {status_name}\n"
 
-            msg = bot.reply_to(message, response)
+            markup = ReplyKeyboardMarkup(row_width=1, one_time_keyboard=True, resize_keyboard=True)
+            markup.add(KeyboardButton('Cancelar'))
+
+            msg = bot.reply_to(message, response, reply_markup=markup)
             bot.register_next_step_handler(msg, lambda msg: ask_edit_choice(msg, user_id))
         else:
             bot.reply_to(message, 'No tienes tareas registradas.')
@@ -203,6 +195,11 @@ def select_task_to_edit(message):
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
 def ask_edit_choice(message, user_id):
+    if message.text == 'Cancelar':
+        bot.reply_to(message, "Edición cancelada.")
+        show_initial_buttons(message.chat.id)
+        return
+    
     try:
         num_task_user = int(message.text)
 
@@ -232,11 +229,11 @@ def ask_edit_choice(message, user_id):
                 bot.register_next_step_handler(msg, lambda msg: handle_edit_choice(msg, task_id))
             else:
                 bot.reply_to(message, "Tarea no encontrada.")
+                select_task_to_edit(message)
         else:
             bot.reply_to(message, 'Error al conectar a la base de datos.')
     except ValueError:
         bot.reply_to(message, 'Entrada inválida. Por favor, ingresa un número de tarea válido.')
-
 
 def handle_edit_choice(message, task_id):
     choice = message.text
@@ -253,19 +250,24 @@ def handle_edit_choice(message, task_id):
             cursor.close()
             conn.close()
 
-            status_buttons = [KeyboardButton(status[0]) for status in statuses]
-            markup = ReplyKeyboardMarkup(row_width=2, one_time_keyboard=True, resize_keyboard=True)
-            markup.add(*status_buttons)
+            if statuses:
+                markup = ReplyKeyboardMarkup(row_width=3, one_time_keyboard=True, resize_keyboard=True)
+                for status in statuses:
+                    markup.add(KeyboardButton(status[0]))
+                markup.add(KeyboardButton('Cancelar'))
 
-            msg = bot.reply_to(message, "Selecciona el nuevo estado:", reply_markup=markup)
-            bot.register_next_step_handler(msg, lambda msg: update_task_status(msg, task_id))
+                msg = bot.reply_to(message, "Selecciona el nuevo estado:", reply_markup=markup)
+                bot.register_next_step_handler(msg, lambda msg: update_task_status(msg, task_id))
+            else:
+                bot.reply_to(message, "No se encontraron estados disponibles.")
+        else:
+            bot.reply_to(message, 'Error al conectar a la base de datos.')
     elif choice == 'Editar Fecha de Entrega':
-        msg = bot.reply_to(message, "Ingresa la nueva fecha de entrega (formato YYYY-MM-DD):")
+        msg = bot.reply_to(message, "Ingresa la nueva fecha de entrega (YYYY-MM-DD):")
         bot.register_next_step_handler(msg, lambda msg: update_task_due_date(msg, task_id))
-    elif choice == 'Cancelar':
-        show_initial_buttons(message.chat.id)
     else:
-        bot.reply_to(message, 'Opción inválida. Por favor, selecciona "Editar Descripción", "Editar Estado", "Editar Fecha de Entrega" o "Cancelar".')
+        bot.reply_to(message, "Edición cancelada.")
+        show_initial_buttons(message.chat.id)
 
 def update_task_description(message, task_id):
     new_description = message.text
@@ -273,13 +275,12 @@ def update_task_description(message, task_id):
     conn = get_db_connection()
     if conn:
         cursor = conn.cursor()
-        query = "UPDATE tasks SET descript = %s WHERE id = %s"
-        cursor.execute(query, (new_description, task_id))
+        cursor.execute("UPDATE tasks SET descript = %s WHERE id = %s", (new_description, task_id))
         conn.commit()
         cursor.close()
         conn.close()
 
-        bot.reply_to(message, "La descripción de la tarea ha sido actualizada.")
+        bot.reply_to(message, "Descripción actualizada correctamente.")
         show_initial_buttons(message.chat.id)
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
@@ -290,44 +291,41 @@ def update_task_status(message, task_id):
     conn = get_db_connection()
     if conn:
         cursor = conn.cursor()
-        query = "SELECT id FROM task_status WHERE name = %s"
-        cursor.execute(query, (new_status,))
-        status_id = cursor.fetchone()
-        
-        if status_id:
-            query = "UPDATE tasks SET status_id = %s WHERE id = %s"
-            cursor.execute(query, (status_id[0], task_id))
+        cursor.execute("SELECT id FROM task_status WHERE name = %s", (new_status,))
+        status = cursor.fetchone()
+        if status:
+            new_status_id = status[0]
+            cursor.execute("UPDATE tasks SET status_id = %s WHERE id = %s", (new_status_id, task_id))
             conn.commit()
-            bot.reply_to(message, "El estado de la tarea ha sido actualizado.")
+            bot.reply_to(message, "Estado actualizado correctamente.")
         else:
-            bot.reply_to(message, "Estado no válido.")
-        
+            bot.reply_to(message, "Estado no encontrado.")
         cursor.close()
         conn.close()
+
         show_initial_buttons(message.chat.id)
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
 def update_task_due_date(message, task_id):
-    new_due_date_str = message.text
     try:
-        new_due_date = datetime.strptime(new_due_date_str, '%Y-%m-%d')
-
-        conn = get_db_connection()
-        if conn:
-            cursor = conn.cursor()
-            query = "UPDATE tasks SET due_date = %s WHERE id = %s"
-            cursor.execute(query, (new_due_date, task_id))
-            conn.commit()
-            cursor.close()
-            conn.close()
-
-            bot.reply_to(message, "La fecha de entrega de la tarea ha sido actualizada.")
-            show_initial_buttons(message.chat.id)
-        else:
-            bot.reply_to(message, 'Error al conectar a la base de datos.')
+        new_due_date = datetime.strptime(message.text, '%Y-%m-%d')
     except ValueError:
-        bot.reply_to(message, "Formato de fecha inválido. Por favor, usa el formato YYYY-MM-DD.")
+        bot.reply_to(message, 'Formato de fecha no válido. Por favor, proporciona la fecha en el formato YYYY-MM-DD.')
+        return
+
+    conn = get_db_connection()
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE tasks SET due_date = %s WHERE id = %s", (new_due_date, task_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        bot.reply_to(message, "Fecha de entrega actualizada correctamente.")
+        show_initial_buttons(message.chat.id)
+    else:
+        bot.reply_to(message, 'Error al conectar a la base de datos.')
 
 # Comando /delete para eliminar tareas
 @bot.message_handler(commands=['Eliminar'])
@@ -338,7 +336,7 @@ def select_task_to_delete(message):
     if conn:
         cursor = conn.cursor()
         query = """
-        SELECT t.id, t.descript, s.name
+        SELECT t.id, t.num_task_user, t.descript, s.name
         FROM tasks t
         JOIN task_status s ON t.status_id = s.id
         WHERE t.user_id = %s
@@ -351,36 +349,90 @@ def select_task_to_delete(message):
         if tasks:
             response = "Selecciona el número de la tarea que deseas eliminar:\n"
             for task in tasks:
-                task_id, description, status_name = task
-                response += f"{task_id}. {description} - {status_name}\n"
+                task_id, num_task_user, description, status_name = task
+                response += f"{num_task_user}. {description} - {status_name}\n"
 
-            msg = bot.reply_to(message, response)
-            bot.register_next_step_handler(msg, delete_task)
+            markup = ReplyKeyboardMarkup(row_width=1, one_time_keyboard=True, resize_keyboard=True)
+            markup.add(KeyboardButton('Cancelar'))
+
+            msg = bot.reply_to(message, response, reply_markup=markup)
+            bot.register_next_step_handler(msg, lambda msg: delete_task(msg, user_id))
         else:
             bot.reply_to(message, 'No tienes tareas registradas.')
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
-def delete_task(message):
+def delete_task(message, user_id):
+    if message.text == 'Cancelar':
+        bot.reply_to(message, "Edición cancelada.")
+        show_initial_buttons(message.chat.id)
+        return
+    
     try:
-        task_id = int(message.text)
+        num_task_user = int(message.text)
 
         conn = get_db_connection()
         if conn:
             cursor = conn.cursor()
-            query = "DELETE FROM tasks WHERE id = %s"
-            cursor.execute(query, (task_id,))
-            conn.commit()
+            query = """
+            SELECT id
+            FROM tasks
+            WHERE user_id = %s AND num_task_user = %s
+            """
+            cursor.execute(query, (user_id, num_task_user))
+            task = cursor.fetchone()
             cursor.close()
             conn.close()
 
-            bot.reply_to(message, "Tarea eliminada.")
-            show_initial_buttons(message.chat.id)
+            if task:
+                task_id = task[0]
+
+                conn = get_db_connection()
+                if conn:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+
+                    update_all_tasks_user(user_id)
+
+                    bot.reply_to(message, "Tarea eliminada correctamente.")
+                    show_initial_buttons(message.chat.id)
+                else:
+                    bot.reply_to(message, 'Error al conectar a la base de datos.')
+            else:
+                bot.reply_to(message, "Tarea no encontrada.")
+                select_task_to_delete(message)
         else:
             bot.reply_to(message, 'Error al conectar a la base de datos.')
     except ValueError:
         bot.reply_to(message, 'Entrada inválida. Por favor, ingresa un número de tarea válido.')
 
+def update_all_tasks_user(id):
+    conn = get_db_connection()
+    if conn:
+        cursor = conn.cursor()
+        query = """
+        SELECT t.id
+        FROM tasks t
+        WHERE t.user_id = %s
+        """
+        cursor.execute(query, (id,))
+        tasks = cursor.fetchall()
+        cursor.close()
+
+        if tasks:
+            cursor = conn.cursor()
+            cont = 1
+            for task in tasks:
+                task_id = task[0]
+                query = "UPDATE tasks SET num_task_user = %s WHERE id = %s"
+                cursor.execute(query, (cont, task_id))
+                cont += 1
+            conn.commit()
+            cursor.close()
+        conn.close()
 
 # Iniciar el bot
 if __name__ == "__main__":
