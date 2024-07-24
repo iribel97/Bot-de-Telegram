@@ -78,11 +78,29 @@ def handle_task_due_date(message, task_description):
         bot.send_message(message.chat.id, 'La fecha de vencimiento no puede ser menor a la fecha actual. Por favor, proporciona una fecha válida.')
         bot.register_next_step_handler(message, handle_task_due_date, task_description)
         return
+    
+    #Comparar que la fecha ingresada no sea mayor a 2090
+    if task_due_date.year > 2090:
+        bot.send_message(message.chat.id, 'La fecha de vencimiento no puede ser mayor al año 2090. Por favor, proporciona una fecha válida.')
+        bot.register_next_step_handler(message, handle_task_due_date, task_description)
+        return
 
     conn = get_db_connection()
+
+
     if conn:
+        #Traer todos los task del usuario
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO tasks (user_id, descript, due_date) VALUES (%s, %s, %s)', (user_id, task_description, task_due_date))
+        query = """
+            SELECT t.descript, t.due_date, s.name
+            FROM tasks t
+            JOIN task_status s ON t.status_id = s.id
+            WHERE t.user_id = %s
+            """
+        cursor.execute(query, (user_id,))
+        tasks = cursor.fetchall()
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO tasks (user_id, descript, due_date, num_task_user) VALUES (%s, %s, %s, %s)', (user_id, task_description, task_due_date, tasks.__len__()+1))
         conn.commit()
         cursor.close()
         conn.close()
@@ -161,7 +179,7 @@ def select_task_to_edit(message):
     if conn:
         cursor = conn.cursor()
         query = """
-        SELECT t.id, t.descript, s.name
+        SELECT t.id, t.num_task_user, t.descript, s.name
         FROM tasks t
         JOIN task_status s ON t.status_id = s.id
         WHERE t.user_id = %s
@@ -174,8 +192,8 @@ def select_task_to_edit(message):
         if tasks:
             response = "Selecciona el número de la tarea que deseas editar:\n"
             for task in tasks:
-                task_id, description, status_name = task
-                response += f"{task_id}. {description} - {status_name}\n"
+                task_id, num_task_user ,description, status_name = task
+                response += f"{num_task_user}. {description} - {status_name}\n"
 
             msg = bot.reply_to(message, response)
             bot.register_next_step_handler(msg, ask_edit_choice)
