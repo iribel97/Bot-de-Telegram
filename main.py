@@ -24,7 +24,7 @@ def get_db_connection():
 TOKEN = '7455687188:AAEQsUC6ENXGXb93V55PmNAfZp75AC-E1CU'
 bot = telebot.TeleBot(TOKEN)
 
-# Función para mostrar los botones iniciales
+# Función para mostrar los botones iniciales -------------------------------------------------------------------
 def show_initial_buttons(chat_id):
     markup = ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
     btn_add_task = KeyboardButton('/Agregar')
@@ -34,7 +34,7 @@ def show_initial_buttons(chat_id):
     markup.add(btn_add_task, btn_list_tasks, btn_edit_task, btn_delete_task)
     bot.send_message(chat_id, 'Selecciona una opción:', reply_markup=markup)
 
-# Creación de comandos simples como `/start`
+# Creación de comandos simples como `/start` --------------------------------------------------------------------
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user = message.from_user
@@ -49,16 +49,23 @@ def send_welcome(message):
     bot.send_message(message.chat.id, f'Hola {user.first_name}! Soy tu agenda bot. ¿Qué te gustaría hacer?')
     show_initial_buttons(message.chat.id)
 
-# Manejar la descripción de la tarea
+# Manejar la descripción de la tarea --------------------------------------------------------------------
 def handle_task_description(message):
     user_id = message.from_user.id
     task_description = message.text
+    #Validar que lo ingresado por el ususario no sea un boton
+    if task_description == '/Agregar' or task_description == '/Mostrar' or task_description == '/Editar' or task_description == '/Eliminar':
+        bot.send_message(message.chat.id, 'Por favor, proporciona una descripción de la tarea.')
+        bot.register_next_step_handler(message, handle_task_description)
+        return
+
     bot.send_message(message.chat.id, 'Por favor, proporciona una fecha de vencimiento para la tarea (formato: YYYY-MM-DD).')
     bot.register_next_step_handler(message, handle_task_due_date, task_description)
 
-# Manejar la fecha de vencimiento de la tarea
+# Manejar la fecha de vencimiento de la tarea --------------------------------------------------------------------
 def handle_task_due_date(message, task_description):
     user_id = message.from_user.id
+    # Validación que la fecha ingresada sea válida
     try:
         task_due_date = datetime.strptime(message.text, '%Y-%m-%d')
     except ValueError:
@@ -69,13 +76,13 @@ def handle_task_due_date(message, task_description):
     # Obtener la fecha actual
     current_date = datetime.now()
     
-    # Comparar la fecha ingresada con la fecha actual
+    # Validación de la fecha ingresada sea menor con la fecha actual
     if task_due_date < current_date:
         bot.send_message(message.chat.id, 'La fecha de vencimiento no puede ser menor a la fecha actual. Por favor, proporciona una fecha válida.')
         bot.register_next_step_handler(message, handle_task_due_date, task_description)
         return
     
-    # Comparar que la fecha ingresada no sea mayor a 2090
+    # validación que la fecha ingresada no sea mayor a 2090
     if task_due_date.year > 2090:
         bot.send_message(message.chat.id, 'La fecha de vencimiento no puede ser mayor al año 2090. Por favor, proporciona una fecha válida.')
         bot.register_next_step_handler(message, handle_task_due_date, task_description)
@@ -96,13 +103,13 @@ def handle_task_due_date(message, task_description):
 
     bot.send_message(message.chat.id, '¡Tarea agregada!')
 
-# Comando /add para agregar tareas
+# Comando /add para agregar tareas --------------------------------------------------------------------
 @bot.message_handler(commands=['Agregar'])
 def add_task(message):
     bot.send_message(message.chat.id, 'Por favor, proporciona una descripción de la tarea.')
     bot.register_next_step_handler(message, handle_task_description)
 
-# Comando /list para listar tareas
+# Comando /list para listar tareas --------------------------------------------------------------------
 @bot.message_handler(commands=['Mostrar'])
 def list_tasks(message):
     user_id = message.from_user.id
@@ -159,7 +166,7 @@ def list_tasks(message):
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
-# Comando /edit para editar tareas
+# Comando /edit para editar tareas --------------------------------------------------------------------
 @bot.message_handler(commands=['Editar'])
 def select_task_to_edit(message):
     user_id = message.from_user.id
@@ -194,6 +201,7 @@ def select_task_to_edit(message):
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
+# Función para preguntar qué se desea editar de la tarea --------------------------------------------------------------------
 def ask_edit_choice(message, user_id):
     if message.text == 'Cancelar':
         bot.reply_to(message, "Edición cancelada.")
@@ -235,6 +243,7 @@ def ask_edit_choice(message, user_id):
     except ValueError:
         bot.reply_to(message, 'Entrada inválida. Por favor, ingresa un número de tarea válido.')
 
+# Función para manejar la elección de edición de la tarea --------------------------------------------------------------------
 def handle_edit_choice(message, task_id):
     choice = message.text
 
@@ -269,6 +278,7 @@ def handle_edit_choice(message, task_id):
         bot.reply_to(message, "Edición cancelada.")
         show_initial_buttons(message.chat.id)
 
+# Funciones para actualizar la descripción, estado y fecha de entrega de la tarea --------------------------------------------------------------------
 def update_task_description(message, task_id):
     new_description = message.text
 
@@ -285,6 +295,7 @@ def update_task_description(message, task_id):
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
+# Funciones para actualizar la descripción, estado y fecha de entrega de la tarea --------------------------------------------------------------------
 def update_task_status(message, task_id):
     new_status = message.text
 
@@ -307,6 +318,7 @@ def update_task_status(message, task_id):
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
+# Funciones para actualizar la descripción, estado y fecha de entrega de la tarea --------------------------------------------------------------------
 def update_task_due_date(message, task_id):
     try:
         new_due_date = datetime.strptime(message.text, '%Y-%m-%d')
@@ -327,7 +339,7 @@ def update_task_due_date(message, task_id):
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
-# Comando /delete para eliminar tareas
+# Comando /delete para eliminar tareas --------------------------------------------------------------------
 @bot.message_handler(commands=['Eliminar'])
 def select_task_to_delete(message):
     user_id = message.from_user.id
@@ -362,6 +374,7 @@ def select_task_to_delete(message):
     else:
         bot.reply_to(message, 'Error al conectar a la base de datos.')
 
+# Función para eliminar la tarea seleccionada --------------------------------------------------------------------
 def delete_task(message, user_id):
     if message.text == 'Cancelar':
         bot.reply_to(message, "Edición cancelada.")
@@ -409,6 +422,7 @@ def delete_task(message, user_id):
     except ValueError:
         bot.reply_to(message, 'Entrada inválida. Por favor, ingresa un número de tarea válido.')
 
+# Función para actualizar el número de tarea del usuario --------------------------------------------------------------------
 def update_all_tasks_user(id):
     conn = get_db_connection()
     if conn:
@@ -434,6 +448,6 @@ def update_all_tasks_user(id):
             cursor.close()
         conn.close()
 
-# Iniciar el bot
+# Iniciar el bot --------------------------------------------------------------------
 if __name__ == "__main__":
     bot.polling(none_stop=True)
